@@ -1,0 +1,207 @@
+---
+title: "Egzaminas" #nekeisti
+author: "Rokas Krupinskas, 1811363" 
+institute: "Vilniaus Universitetas (EVAF)" #nekeisti 
+date: "`r format(Sys.time(), '%Y-%m-%d %H:%M')`"#nekeisti
+output: #nekeisti
+  html_document: #nekeisti
+    number_sections: TRUE #nekeisti
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse = TRUE, error = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Prieš pradedant
+* Ant desktopo sukurkite direktoriją "exam", į ją išsaugokite šį dokumentą pakeisdami jo pavadinimą į "StudNr_Vardas_Pavarde.Rmd" (nenaudokite lt rašmenų) bei atitinkamai pakeisdami viršuje esančius laukelius: "author: ..."
+* Sumegzkite iškart šį dokumentą į .html failą ir įsitikinkite, jog viskas veikia gerai, tik tada pradėkite spręsti uždavinius.
+
+
+# Pasiruošimas
+Šioje kodo dalyje surašykite visus paskesnėse dalyse naudojamus R paketus. Kodas turi patikrinti, ar paketas yra instaliuotas, jeigu ne, instaliuoti bei užloadinti. Jeigu darbo eigoje prireikia naujų paketų, nepamirkite čia juos įrašyti.
+
+```{r, echo=TRUE, message=FALSE}
+if(!require(eurostat)) install.packages("eurostat"); require(eurostat)
+if(!require(tidyverse)) install.packages("tidyverse"); require(tidyverse)
+if(!require(rsdmx)) install.packages("rsdmx"); require(rsdmx)
+if(!require(tidyr)) install.packages("tidyr"); require(tidyr)
+if(!require(reshape2)) install.packages("reshape2"); require(reshape2)
+```
+
+
+# Istorija
+Šiuo metu Jūs darbuojatės NVO "Stop skurdas". Koks tai "influenceris" patrolino visuomenę (galimai apmokėtas privačių pensijų fondų), jog Sodroje kaupti pensijai neapsimoka ir kaip pvz. pateikė savo mamulę, gaunančią vos 221 eurą per mėnesį. 
+https://i1.wp.com/lithuanian-economy.net/wp-content/uploads/2019/06/Saugirdas.jpg
+
+
+Komentaruose pasipylė aibė pasisakymų, jog jeigu neturėtume "pašalpinių" armijos ir jiems skirtus pinigus skirtume pensininkams, tai pensininkai gyventų "oriau".  
+
+Jums tokie argumentai sukelia daug abejonių. Kadangi Jūs kažkaip išgyvenote  duomenų analizės įvadą, Jūs nusprendžiate pateikti tam tikrus faktus viešai diskusijai. Šių faktų generavimas ir yra Jūsų egzamino užduotis.
+
+
+## Duomenų importas
+Importuokite duomenis iš eurostat apie tai, kiek Lietuva (visas valdžios sektorius) ir ES-28 skiria % BVP socialinei paramai. Kadangi datasetas yra didelis, rekomenduoju parsisiųsti tik reikalingus duomenis. 
+
+[Pagalba: "gov_10a_exp", reikalingos išlaidų rūšys "Social protection", "Old age", "Sickness and disability"]
+
+```{r}
+gov_10a_exp <- get_eurostat(id="gov_10a_exp", stringsAsFactors = FALSE,
+             filters = list(geo=c("EU28","LT"),
+                            sector="S13",
+                            unit="PC_GDP",
+                            na_item="TE",
+                            cofog99=c("GF1002","GF1001","GF10"),
+                            time=c("2017","2016","2015","2014","2013","2012","2011","2010","2009","2008","2007","2006","2005","2004")))
+```
+
+## Duomenų apdorojimas
+Kadangi "pašalpiniai" gauna įvairią socialinę pagalbą (pvz., lengvatas būsto šildymui, vaikų maitinimui mokykloje ir t.t.), šioje dalyje pabandysime iš visų išlaidų socialinei apsaugai atimti pensijas ir ligos pašalpas, o likutį pavadinsime `pasalpa`. 
+
+Sukurkite nauja dataframe objektą, kuriame būtų LT ir EU28 laiko eilutės (nuo 2004 metų) su 2 išlaidų sritimis: pasalpa (kurią apskaičiavote) bei išlaidomis pensijoms.
+
+```{r}
+df1 <- spread(gov_10a_exp, cofog99, values)
+df <- df1 %>%
+        mutate(pasalpa=GF10-(GF1001+GF1002))%>%
+        select(c(4,5,8,9))
+df <- melt(df, id.vars = c("geo","time"))
+```
+
+## Nubraižykite grafiką
+
+* Nubraižykite prieš tai žingsnyje apdorotus duomenis linijine diagrama su taškais (shape) 
+* Spalvą priskirkite geo
+* Taškų (shape) formą priskirkite išlaidų rūšims. 
+* Tikėtina Jums reikės googlinti arba ieškoti stackoverflow, kaip pranešti ggplot2, kaip yra sugrupuoti duomenys (jeigu norite jog visos 4 linijos būtų viename grafike), alternatyviai galite skaidyti grafiką į dvi dalis, pagal išlaidų rūšis (tada skaidymas turi vykti naudojant vieną iš ggplot2 komandų)
+* Nepamirškite tvarkingo apipavidalinimo (ašys, antraštės ir t.t.)
+
+```{r}
+ggplot(df, aes(x=time,y=value, colour=geo))+
+        geom_line(aes(group=interaction(variable,geo)))+
+       scale_y_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11), 
+                     limits = c(0,11))+
+        scale_x_date(date_labels = "%Y", date_breaks = "1 year") +
+        geom_point()+
+       labs(x="Laikotarpis", 
+       y="procentai BVP", 
+       title= "Pašalpų dydis EU28 ir Lietuvoje 
+(iš visų išlaidų socialinei apsaugai atėmus pensijas ir ligos pašalpas)
+(2004-2017 metais)",
+       subtitle = "Šaltinis: Eurostat (gov_10a_exp)", color="Europos šalys")
+
+```
+
+
+
+## Apskaičiuokite
+
+Taip pat, Jūs nusprendėte pateikti lentelę, kurioje būtų matyti kiek % BVP pensijoms ir pašalpoms skyrė EU28 ir Lietuva 2017m.
+Visgi vien tik procentinės išraiškos nėra labai informatyvios, tad Jūs nusprendžiate pateikite lentelę (dataframe pageidautiną perleistą į lentelių formavimo komandą) susidedančią iš 2 eilučių (cofog99) ir 4 stulpelių:
+
+* ES28 išlaidos % BVP
+* LT išlaidos % BVP
+* skirtumas procentiniais punktais (primenu, 1.9%-1.5%=0.4 proc.punkto)
+* trečio stulpelio reikšmes sudauginkite su Lietuvos 2017m BVP (= 41857 mln eur), nes norite žinoti, kiek mln eurų reiktų skirti šioms sritims, tam kad pasiektume ES vidurkį
+* PERSPĖJIMAS: kai skaičiuosite reikalingas lėšas, pasitikrinkite, ar teisingai skaičiuojate  kai sudauginate su proc. punktais! :)
+
+```{r}
+df2 <- df %>%
+        filter(time=="2017-01-01")%>%
+        select(c(1,3,4))
+LTBVP <- 41857
+df2 <- spread(df2, variable, value)
+df2 <- df2 %>%
+      mutate(skirtumas=GF1002-pasalpa)%>%
+      mutate(dauginimas=(skirtumas/100)*LTBVP)
+        
+```
+
+
+## Grafikas 2 
+
+Pastebėję, jog socialinės išlaidos pakankamai skiriasi tarp LT is ES28, Jūs nusprendėte nubraižyti stulpelinį grafiką, kuriame būtų pavaizduotos visų ES (t.y. 28!) šalių išlaidos socialiniai sričiai bendrai ("Social protection") % nuo BVP. Naudokite 2017 metų rodiklius. Tam jog matytųsi ES28 vidurkis nubraižykite jį į grafiką kaip horizontalią liniją.
+
+Jums gali reikėti atsisiųsti reikiamą Eurostat dataset iš naujo. 
+Stulpeliai turėtų būti surikiuoti didėjančia tvarka, jų viršuje pateikiamos  stulpelių reikšmės.
+
+Grafikas turėtų atrodyti daugmaž taip: https://i2.wp.com/lithuanian-economy.net/wp-content/uploads/2019/03/private_expenditue_MTEP_2017.jpeg?resize=768%2C427
+
+
+```{r}
+EU28 <- 18.8
+gov_10a_exp1 <- get_eurostat(id="gov_10a_exp", stringsAsFactors = FALSE,
+             filters = list(sector="S13",
+                            unit="PC_GDP",
+                            na_item="TE",
+                            cofog99=c("GF10"),
+                            time=c("2017")))
+df4 <- gov_10a_exp1 %>%
+        filter(geo %in% c("BE",
+	"BG",
+	"CZ",
+	"DK",
+	"DE", 
+	"EE",
+	"IE",
+	"EL",
+	"IT",
+	"CY",	
+	"LV",	
+	"LT",
+	"LU",
+	"HU",
+	"MT",
+	"NL",
+	"AT",
+	"PL",	
+	"PT",
+	"RO",
+	"SI",
+	"SK",
+	"FI",
+	"SE",
+	"UK"))
+ggplot(df4, aes(x=reorder(geo,values),y=values))+
+        geom_bar(stat = "identity", fill="steelblue")+
+        geom_hline(yintercept = EU28, color="black")+
+        geom_text(aes(0,EU28,label = "EU-28", vjust = -0.5, hjust=-1))+
+         labs(x="Šalys", 
+       y="% BVP", 
+       title= "Išlaidos socialinei sričiai bendrai, % BVP, 2017 m.",
+       subtitle = "Šaltinis: Eurostat (gov_10a_exp)")
+
+        
+```
+
+
+## Vertinimas
+Pateikite trumpą situacijos vertinimą remiantis iki šiol atlikta duomenų analizę. Pateikite savo įžvalgas, kaip būtų galima spręsti žemų pensijų  problemas ateityje. Drąsiai galite remtis Europos Komisijos ataskaita bei rekomendacijomis Lietuvai. 
+
+* Rekomendacija: https://ec.europa.eu/info/sites/info/files/file_import/2019-european-semester-country-specific-recommendation-commission-recommendation-lithuania_en.pdf
+* Ataskaita : https://ec.europa.eu/info/sites/info/files/file_import/2019-european-semester-country-report-lithuania_lt.pdf
+
+```{r, eval=TRUE}
+#Parašykite apie 200 (+- 20) žodžių. 
+#Rašykite VIETOJ Lore ipsum... teksto t.y. tarpe tarp abiejų kabučių.
+#Jeigu norite žinoti kiek žodžių parašėte, galite runninti tik šit snippet' jo kampytyje nuspaudę ant žalio trikampio rodančio į dešinę
+
+str1 <- 
+"
+Žiūrint į atliktos duomenų analizės rezultatus galima pastebėti, jog situacija Lietuvoje palyginus su Europos Sąjungos kitomis narėmis yra nekokia. Lyginant 2017 metų duomenis apie %BVP išleisto socialinei sričiai bendrai Lietuva yra antra nuo galo (11,2 procentų) ir nuo Europos Sąjungos vidurkio atsilieka net 7,6 procento, o nuo daugiausiai šiai sričiai skiriančios valstybės 13,7 procento. Galima daryti išvadas, kad Lietuvoje yra blogai ir reikia tai keisti. Šią problemą reiktų spręsti darant pensijų reformas, didinant pensijoms skirtą BVP % dalį ir tai daryti atėmant iš kitų sričių, kur BVP % yra daugiau, pavyzdžiui iš gynybos, nes tai neturėtų būti labai reikalinga kai esame NATO nare. Taip pat svarbu paminėti, jog Lietuva stipriai atsilieka nuo EU28 pašalpų vidurkio, o tai daug ką sako. Reikėtų didinti pensijų fiskalinį tvarumą ir stiprinti 1 ir 2 pakopos pensijų sistemas ir skatinti žmones dalyvauti jose. Dar galima didinti darbo užmokesčio fondą, nes pensijų augimas nuo to irgi priklauso. Svarbu akcentuoti tai, jog Lietuvoje darbo jėga mažėja, todėl reikia į tai atsižvelgti ir pensijos augs tuo atveju nevienodai kaip darbo užmokestis. Todėl paskutinis argumentas būtų, jog reikia būtinai didinti darbo jėgą Lietuvoje, gerinti sąlygas gyvenimo, kad žmonės nenorėtų išvykti iš Lietuvos svetur, dėl geresnio gyvenimo, o pasiliktų Lietuvoje.
+
+
+"
+sapply(strsplit(str1," "),length)
+```
+
+
+
+
+
+
+
+## Darbo užbaigimo ir ship'inimo instrukcija:
+* Sumegzkite šį dokumentą į `html`, jeigu Jūsų kode yra klaidų ir sumezgimas neveikia, išsaugokite šį failą tiesiog "File -> save"
+* Savo Github paskyroje sukurkite repo "exam"
+* Pushinkit lokalią repo į Github. Direktorijoje turi būti 2 failai: "StudNr_Vardas_Pavardė.Rmd" ir "StudNr_Vardas_Pavardė.html"
+* Įsitikinkite jog Githube guli repo kopija ir repo url įrašykite į google docs J stulpelį: https://docs.google.com/spreadsheets/d/1H_ts3wTKYZ4rocmFseR2YJtZHfhJ543MUWsTTa7x5Kc/edit?usp=sharing
